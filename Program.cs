@@ -16,20 +16,54 @@ internal class Program
     private static ManualResetEvent dataReceivedEvent = new ManualResetEvent(false);
     private static void Main(string[] args)
     {
-        string deviceDetails= FindingSerialPortWithData();
-        //FindingSerialPortWithDataUsingEventHandlers();
-
-        if (deviceDetails != null)
+        bool connected=IsAnyDeviceConnected();
+        if(connected)
         {
-            string jsonString = ParsingDeviceDataToJobject(deviceDetails);
+            string deviceDetails = FindingSerialPortWithData();
+            //FindingSerialPortWithDataUsingEventHandlers();
 
-            ConvertJsonObjToDeviceObj(jsonString);
+            if (deviceDetails != null)
+            {
+                string jsonString = ParsingDeviceDataToJobject(deviceDetails);
 
-            InsertAndRetrieveMongo(jsonString);
+                ConvertJsonObjToDeviceObj(jsonString);
+
+                MongoDBInsertAndRetrieve(jsonString);
+            }
+        }
+        else
+        {
+            Console.WriteLine("Please connect a device.");
         }
 
+        
 
+    }
 
+    static bool IsAnyDeviceConnected()
+    {
+        bool connected = false;
+        foreach (string portName in SerialPort.GetPortNames())
+        {
+            using(SerialPort port=new SerialPort(portName))
+            {
+                try
+                {
+                    port.Open();
+                    if(port.BytesToRead>0) 
+                    {
+                        return true;
+                    }
+                }
+                catch(Exception ex)
+                {
+
+                }
+
+            }
+        }
+
+        return connected;
     }
 
     static string FindingSerialPortWithData()
@@ -252,7 +286,7 @@ internal class Program
         }
     }
 
-    static void InsertAndRetrieveMongo(string jsonDevice)
+    static void MongoDBInsertAndRetrieve(string jsonDevice)
     {
         try
         {
@@ -261,21 +295,37 @@ internal class Program
             var database = client.GetDatabase("DeviceDb");
             var collection = database.GetCollection<BsonDocument>("DeviceCollection");
             var document = BsonSerializer.Deserialize<BsonDocument>(jsonDevice);
-            collection.InsertOne(document);
-            var docId = document["_id"].ToString();
+            var serialNo = document["SerialNumber"].ToString();
+            var filter = Builders<BsonDocument>.Filter.Eq("SerialNumber", serialNo);
+            var existingDocument = collection.Find(filter).FirstOrDefault();
 
-            Console.WriteLine($"\nThe document is inserted in MongoDB with document ID {docId}");
-            var documentid = ObjectId.Parse(docId.ToString());
-            var filter = Builders<BsonDocument>.Filter.Eq("_id", documentid);
-            var retrieveddoc = collection.Find(filter).FirstOrDefault();
-            Console.WriteLine($"\n Retrieved document from MongoDB with documentID {docId}");
-            Console.WriteLine(retrieveddoc.ToString());
+            if (existingDocument != null)
+            {
+                Console.WriteLine($"\nThe document with Serial Number {serialNo} already exists in MongoDB. Skipping insertion.");
+                Console.WriteLine(existingDocument.ToString());
+            }
+            else
+            {
+                // The document does not exist, so insert it
+                collection.InsertOne(document);
+                var docId = document["_id"].ToString();
+                Console.WriteLine($"\nThe document is inserted in MongoDB with document ID {docId}");
+                var documentId = ObjectId.Parse(docId);
+                filter = Builders<BsonDocument>.Filter.Eq("_id", documentId);
+                var insertedDocument = collection.Find(filter).FirstOrDefault();
+                Console.WriteLine(insertedDocument.ToString());
+            }
+
         }
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
         }
     }
+
+    
+
+
 
     private static void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
     {
