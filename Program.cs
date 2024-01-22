@@ -16,55 +16,26 @@ internal class Program
     private static ManualResetEvent dataReceivedEvent = new ManualResetEvent(false);
     private static void Main(string[] args)
     {
-        bool connected=IsAnyDeviceConnected();
-        if(connected)
+
+        string deviceDetails = FindingSerialPortWithData();
+        //FindingSerialPortWithDataUsingEventHandlers();
+
+        if (deviceDetails != null)
         {
-            string deviceDetails = FindingSerialPortWithData();
-            //FindingSerialPortWithDataUsingEventHandlers();
+            string jsonString = ParsingDeviceDataToJobject(deviceDetails);
 
-            if (deviceDetails != null)
-            {
-                string jsonString = ParsingDeviceDataToJobject(deviceDetails);
+            ConvertJsonObjToDeviceObj(jsonString);
 
-                ConvertJsonObjToDeviceObj(jsonString);
-
-                MongoDBInsertAndRetrieve(jsonString);
-            }
+            MongoDBInsertAndRetrieve(jsonString);
         }
         else
         {
             Console.WriteLine("Please connect a device.");
         }
 
-        
-
     }
 
-    static bool IsAnyDeviceConnected()
-    {
-        bool connected = false;
-        foreach (string portName in SerialPort.GetPortNames())
-        {
-            using(SerialPort port=new SerialPort(portName))
-            {
-                try
-                {
-                    port.Open();
-                    if(port.BytesToRead>0) 
-                    {
-                        return true;
-                    }
-                }
-                catch(Exception ex)
-                {
-
-                }
-
-            }
-        }
-
-        return connected;
-    }
+    
 
     static string FindingSerialPortWithData()
     {
@@ -286,6 +257,7 @@ internal class Program
         }
     }
 
+
     static void MongoDBInsertAndRetrieve(string jsonDevice)
     {
         try
@@ -323,10 +295,6 @@ internal class Program
         }
     }
 
-    
-
-
-
     private static void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
     {
         SerialPort port = (SerialPort)sender;
@@ -342,7 +310,7 @@ internal class Program
 
             ConvertJsonObjToDeviceObj(jsonString);
 
-            InsertAndRetrieveMongo(jsonString);
+            MongoDBInsertAndRetrieve(jsonString);
             dataReceivedEvent.Set();
 
         }
@@ -351,6 +319,7 @@ internal class Program
             Console.WriteLine(ex.Message);
         }
     }
+
 }
 
  
